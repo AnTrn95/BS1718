@@ -19,106 +19,110 @@
 #include <string>
 #include <cstring>
 #include <unistd.h>
+#include <chrono>
+#include <time.h>
+#include <ctime>  // clock((), CLOCK_PER_SEC
 #include <signal.h>  //signal()
 #include <sys/wait.h>  //wait()
 #include <sys/types.h> //pipe()
 
 using namespace std;
 
-/*
- * 
- */
+bool IS_AUTO = false; // per default: DEBUG
+int CLICK = 1; //clock
 
-void stepHandler(int) {
+void step() { // 1 STEP
+    cout << "STEP " << CLICK << endl;
+    CLICK++;
+}
 
+void stepHandler(int i) {
+    if (IS_AUTO) {
+        step();
+        alarm(1); // resets alarm
+    }
 }
 
 int main() {
-    bool menu = true,
-            submenu = true,
-            IS_AUTO_MODE = false;
     pid_t nSimulationsManager; //child
     int childStatus;
     const int BUFFERSIZE = 256;
-    char command[BUFFERSIZE] = "test";
+    char command[BUFFERSIZE];
     string cmd = "D";
     string input_submenu = "";
-    int i = 0;
-    int j = 0;
-
-
-    /*clock*/
-    int time_step = 0;
-
+    /*Timer*/
+    time_t now = time(0);
+    time_t start = time(0);
+    char* dt = ctime(&now);
 
     /*create pipe*/
     int fd[2];
     pipe(fd);
 
-    while (menu) {
-        if ((nSimulationsManager = fork()) == -1) {
-            cerr << "Can't fork\n";
-            exit(0);
-        } else if (j == 0) { //child Process
+    if ((nSimulationsManager = fork()) == -1) {
+        cerr << "Can't fork\n";
+        exit(1);
+    } else if (nSimulationsManager == 0) { //child Process
+        signal(SIGALRM, stepHandler);
+        while (1) {
+            read(fd[0], command, BUFFERSIZE);
+            input_submenu = command;
 
-            if (cmd == "D" || cmd == "Debug") {
-                while (submenu) {
-                    cout << "Debug-Mode" << endl;
-                    /*Reporter*/
-                    // pid_t nReporterChild = fork();
-                    //cout << nReporterChild << endl;
-                    if (i == -1) {
-                        cerr << "Cant fork Reporter\n";
-                        exit(0);
-                    } else if (i == 0) {
-                        cout << "---Submenu---\n"
-                                << "[M]ode to Automatic-Mode\n"
-                                << "[S]tepping\n"
-                                << "[P]rint\n"
-                                << "[Q]uit\n"
-                                << "Choose please: ";
-                        cin >> input_submenu;
-                        input_submenu = toupper(input_submenu[0]);
+            // switched zwischen DEBUG und AUTO
+            if (input_submenu == "M" || input_submenu == "Mode") {
 
-                        /*Submenu*/
-                        if (input_submenu == "M" || input_submenu == "Mode") {
-                            cout << "Mode changed." << endl;
-                            if (!IS_AUTO_MODE) {
-                                IS_AUTO_MODE = true;
-                                cmd = "Automatic";
-                                submenu = false;
-                                alarm(1);
-                            } else {
-                                IS_AUTO_MODE = false;
-                            }
-                        } else if (input_submenu == "S" || input_submenu == "Step") {
+                if (!IS_AUTO) {
+                    IS_AUTO = true;
+                    cout << "=== SWITCHED TO AUTO MODE ==\n";
 
-                        } else if (input_submenu == "P" || input_submenu == "Print") {
+                    alarm(1); // sets first alarm          
+                } else {
+                    IS_AUTO = false;
+                    cout << "=== SWITCHED TO DEBUG MODE ==\n";
+                }
+            } else if (input_submenu == "S" || input_submenu == "Step") {
+                if (!IS_AUTO) step();
 
-                        } else if (input_submenu == "Q" || input_submenu == "Quit") {
-                            submenu = false;
-                        } else {
-                            cerr << "Wrong input. Please try again!" << endl;
-                            input_submenu.clear();
-                            continue;
-                        }
-                    }//End-nReporterchild
-                    time_step = 0;
-                    //exit(0);
-                }//End- while(getline())
-                cout << cmd << endl;
-                cmd.clear();
-                /*Automatic-Mode*/
-            } else if (cmd == "A" && IS_AUTO_MODE == true || cmd == "Automatic" && IS_AUTO_MODE == true) {
-                cout << "Auto-Mode" << endl;
+            } else if (input_submenu == "P" || input_submenu == "Print") {
+                pid_t nReporterChild = fork();
+
+                if (nReporterChild == -1) {
+                    cerr << "Cant fork Reporter\n";
+                    exit(0);
+                } else if (nReporterChild == 0) {
+                    time_t end = time(0);
+                    cout << "Duration time: " << end-start << endl;
+                    exit(0);
+                } else {
+                    wait(&childStatus);
+                    exit(0);
+                }
+            }//End-nReporterchild
+
+            //exit(0);
+        }//End- while(getline())
+        cout << cmd << endl;
+        cmd.clear();
+
+    } else { //parent process
+
+        string buffer;
+        while (1) {
+            cout << "Insert command: ";
+            cin.getline(command, BUFFERSIZE);
+
+            buffer = command;
+
+            if (buffer == "Q" || buffer == "Quit") {
+                // wait(&childStatus);
+                return 0;
             }
-        } else { //parent process
 
             /*writing to pipe*/
-            //write(fd[1],,);
-            wait(&childStatus);
+            write(fd[1], command, BUFFERSIZE);
         }
-        return childStatus;
-    } //End-while(menu)
+    }
+    return childStatus;
+
     return 0;
-} 
+}
