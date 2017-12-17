@@ -34,6 +34,7 @@ public:
     int id;
     static int counter;
     int pid;
+    int m_bursttime;
     int starttime;
     int pr0;
     int ppc;
@@ -42,4 +43,3 @@ public:
 };
 
 #endif /* PROCESS_H */
-

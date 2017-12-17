@@ -1,139 +1,3 @@
-//#include <string.h>
-//#include <unistd.h>
-//#include <sys/types.h>
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <sys/wait.h>
-//
-//
-///*
-// * 
-// */
-//
-//
-//static volatile sig_atomic_t globalFlag = 0;
-//
-//void signal_handler(int signal) {
-//    globalFlag = 1;
-//    return;
-//}
-//
-//enum ausfuehrbare_modien {
-//    debug,
-//    automatic
-//};
-//
-//
-//int main(int argc, char** argv) {
-//
-//    //Prozessmanagervariablen
-//    int modus = debug;
-//    char rarray[255];
-//    int systemzeit=0;
-//    //--
-//
-//    int status = 0;
-//    char warray[255];
-//    int fd[2];
-//    pipe(fd); //0 = Lesen , 1= Schreiben
-//
-//
-//    if (pipe < 0) {
-//        printf("Fehler beim erstellen der Pipe");
-//        return 0;
-//    }
-//
-//
-//    printf("\n Programm bereit zur eingabe.\n");
-//
-//    int childPid = fork();
-//
-//
-//
-//
-//
-//    while (1) {
-//
-//        if (childPid == -1) {
-//            printf(" fehler beim erstellen des Kindporzesses \n");
-//            exit(-1);
-//        }
-//
-//
-//        if (childPid == 0) {
-//            signal(SIGUSR1, signal_handler);
-//
-//
-//            if (modus == debug || globalFlag == 1) {
-//                close(fd[1]); //Schreibseite der Pipe schließen
-//                int nbytes = read(fd[0], rarray, sizeof (rarray));
-//
-//	
-//            if (nbytes >= 1) {
-//                printf("Received string: %s\n", rarray);
-//                printf("ausgabe von child\n");
-//
-//                // AUSWERTUNG
-//                if (strcmp(rarray, "s") == 0 || strcmp(rarray, "step") == 0) {
-//                    systemzeit++;
-//                }
-//
-//                else if (strcmp(rarray, "p") == 0 || strcmp(rarray, "print") == 0) {
-//                    int childPid2 = fork();
-//
-//
-//                    if (childPid2 == -1) {
-//                        printf("Can´t Report");
-//                        exit(1);
-//                    } else if (childPid2 == 0) {
-//                        int tmp = systemzeit;
-//                        printf("Aktuelle Systemzeit: %d\n", tmp);
-//                        exit(1);
-//                    }
-//                }
-//                else if (strcmp(rarray, "m") == 0 || strcmp(rarray, "mode") == 0) {
-//
-//
-//                    // mode=0 = Debug mode=1 = Automatic
-//
-//                    if (modus == debug)
-//                        modus = automatic;
-//                    else
-//                        modus = debug;
-//
-//                }
-//                else if (strcmp(rarray, "q") == 0 || strcmp(rarray, "quit") == 0)
-//                    exit(0);
-//            }
-//                globalFlag = 0;
-//            }
-//            if (modus == automatic) {
-//                printf(".");
-//                systemzeit++;
-//                sleep(1);
-//            }
-//        }
-//
-//        if (childPid > 0) {
-//
-//            close(fd[0]); //Leseseite der Pipe schließen
-//            scanf("%254s", &warray[0]);
-//            write(fd[1], warray, sizeof (warray));
-//            kill(childPid, SIGUSR1);
-//            if (strcmp(warray, "q") == 0 || strcmp(warray, "quit") == 0) {
-//                wait(&status);
-//                break;
-//            } //wenn exit geschrieben wurde auf Kindprozess beendigung warten                
-//
-//        }
-//
-//        fflush(stdout);
-//        fflush(stdin);
-//    }
-//    printf("\n BYE \n ");
-//    return 0;
-//}
-
 #include <string.h>
 #include <cstdlib>
 #include <iostream>
@@ -147,7 +11,7 @@
 #include <fcntl.h>
 #include "process.h"
 #include <vector>
-#include <queue>
+#include <deque>
 
 
 /*
@@ -157,10 +21,10 @@ int pc = 0;
 int r0 = 0; // Die zwei Register
 int systemzeit = 0;
 vector<process*> ptabelle;
-queue <process*> qtabelle;
-queue<process*> blockqueue;
+deque <process*> qtabelle;
+deque<process*> blockqueue;
 vector<process*>copyqueue;
-int quantum =5;
+int quantum = 5;
 
 void init() {
 
@@ -172,63 +36,65 @@ void init() {
 }
 
 process* chooseAKT() {
-    for (int i = 0; i < ptabelle.size(); i++) {
 
-        if (ptabelle[i]->status == laufend)
-            return (ptabelle[i]);
+    if (qtabelle.empty())return nullptr;
+    else {
+        qtabelle.front()->m_bursttime= qtabelle.size();
+        return qtabelle.front();
     }
-    int tmp;
-    if (qtabelle.size() > 0) {
-        for(int i=0;i<qtabelle.size();i++){
-            copyqueue.push_back(qtabelle[i]);
-        }
-        
-        for(int i=0;i<copyqueue.size();i++){
-            if(copyqueue[i]->ppc%quantum==0){
-                tmp=i;
-            break;}
-            
-        }
-        qtabelle.swap(qtabelle.front()qtabelle[tmp])
-        
-        qtabelle.front()->status = laufend;
-        qtabelle.pop();
-    }
-    return NULL;
 }
 
 void scheduler(int r0, int pc) {
-    
-    process *AKT = chooseAKT();
-    if(AKT==NULL)return;    //kein laufender/bereiter Prozess gefunden
-    
-    r0=AKT->pr0;    // LADEN
-    pc=AKT->ppc;
-    
-    ifstream load;
-    string zmemory;
-    
 
-    process *p1;
-    load.open(AKT->dateiname, ios::in);
-    
+    process *AKT = chooseAKT();
+    if (AKT == nullptr)return; //kein laufender/bereiter Prozess gefunden
+    /*process shorter than time-quantum*/
+    else if(systemzeit%quantum <= quantum && AKT->m_bursttime == 0){
+        qtabelle.pop_front();
+    } /*process longer than time-quantum*/
+    else if(systemzeit%quantum <= quantum && AKT->m_bursttime > quantum){
+        AKT->m_bursttime = AKT->m_bursttime - quantum;
+        
+        /*process.front() waiting for the next round at the end*/
+        process* remain_bursttime= qtabelle.front();
+        qtabelle.push_back(remain_bursttime);
+    }
+
+        r0 = AKT->pr0; // LADEN
+        pc = AKT->ppc;
+
+        ifstream load;
+        string zmemory;
+
+
+        process *p1;
+        load.open(AKT->dateiname, ios::in);
+
         for (int i = 0; i <= AKT->ppc; i++)
             getline(load, zmemory);
-    
-    if(zmemory=="")return;  //abfangen wenn ende der datei erreicht ist;
+
+        if (zmemory == "")return; //abfangen wenn ende der datei erreicht ist;
         switch (zmemory[0]) {
-            case 'B': AKT->status=blockend;blockqueue.push(AKT);break;
+            case 'B': AKT->status = blockend;
+                blockqueue.push_back(AKT);
+                break;
             case 'R':
                 p1 = new process();
                 p1->pid = AKT->id;
                 p1->starttime = systemzeit;
+                
+                /*bursttime*/
+                p1->m_bursttime= AKT->m_bursttime;
                 p1->dateiname = zmemory.substr(2, 8);
                 ptabelle.push_back(p1);
-                qtabelle.push(p1);
+                qtabelle.push_back(p1);
                 break;
-            case 'D': r0=r0-atoi(zmemory.substr(2,2).c_str());break;
-            case 'S': r0=   atoi(zmemory.substr(2,2).c_str());break;
-            case 'A': r0=r0+atoi(zmemory.substr(2,2).c_str());break;
+            case 'D': r0 = r0 - atoi(zmemory.substr(2, 2).c_str());
+                break;
+            case 'S': r0 = atoi(zmemory.substr(2, 2).c_str());
+                break;
+            case 'A': r0 = r0 + atoi(zmemory.substr(2, 2).c_str());
+                break;
             case 'E': AKT->status = beendet;
                 break;
 
@@ -237,15 +103,9 @@ void scheduler(int r0, int pc) {
         }
         pc++;
         //AKT->ppc++;
-        AKT->ppc=pc;
-        AKT->pr0=r0;        //SPEICHERN 
-    
-
-
-
-
-
-
+        AKT->ppc = pc;
+        AKT->pr0 = r0; //SPEICHERN 
+        AKT->m_bursttime--;  // decreased bursttime
 }
 
 void signal_handler(int signal) {
@@ -268,7 +128,7 @@ int main(int argc, char** argv) {
     char rarray[255];
     int fd[2];
     //--
-    
+
 
     int status = 0;
     char warray[255];
@@ -318,21 +178,21 @@ int main(int argc, char** argv) {
                 if (strcmp(rarray, "s") == 0 || strcmp(rarray, "step") == 0) {
                     scheduler(r0, pc);
                     systemzeit++;
-                } 
-                
-                
-                 if (strcmp(rarray, "u") == 0 || strcmp(rarray, "unblock") == 0) {
-                    if(blockqueue.size()>0){
-                   blockqueue.front()->status=bereit;
-                   qtabelle.push(blockqueue.front());
-                   blockqueue.pop();}
                 }
-                
-                
-                
-                
-                
-                
+
+
+                if (strcmp(rarray, "u") == 0 || strcmp(rarray, "unblock") == 0) {
+                    if (blockqueue.size() > 0) {
+                        blockqueue.front()->status = bereit;
+                        qtabelle.push_back(blockqueue.front());
+                        blockqueue.pop_front();
+                    }
+                }
+
+
+
+
+
                 else if (strcmp(rarray, "p") == 0 || strcmp(rarray, "print") == 0) {
                     int childPid2 = fork();
 
